@@ -34,3 +34,9 @@ function getLoc() {
   }
   
 }
+
+window.onload = function () {
+  
+  getLoc();
+  
+}

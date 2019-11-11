@@ -3,14 +3,13 @@ library(shiny)
 ui <- fluidPage(
   
   includeScript("app.js"),
-  
+
   tags$h1("Shiny Weather!"),
   tags$br(),
   
   tags$div(class = "form-inline", 
-           tags$input(id = "test", type = "text", class = "form-control", size = "60", placeholder = "Enter location"),
-           tags$button(class = "btn btn-success", "Get weather data"),
-           tags$button(class = "btn btn-primary", onclick = "getLoc()", "Get current location")
+           textInput(inputId = "test", label = "Location:", placeholder = "Enter city, country code"),
+           actionButton(inputId = "getForecast", class = "btn btn-success", label = "Get weather data")
   ),
   
   tags$br(),
