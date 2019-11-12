@@ -8,7 +8,7 @@ function getTextualLoc(long, lat) {
   
   xhr.addEventListener("readystatechange", function () {
     
-  	if (this.status === 200) {
+  	if (this.status == 200) {
   	  result = JSON.parse(this.responseText);
   	  console.log("result");
   		Shiny.setInputValue("test", result[0].City + ", " + result[0].CountryId);

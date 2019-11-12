@@ -1,21 +1,25 @@
 library(shiny)
 library(RCurl)
+library(stringr)
 
 server <- function(input, output, session) {
   
   observeEvent(input$getForecast, {
     
-    if (input$test == "" || is.null(input$test)) {
+    result <- NULL
+    
+    if (grepl(",", input$test)) {
       
-      print("input$test is empty!!!!")
+      result <- str_split(input$test, ", ")
+      print(getURL(paste("api.openweathermap.org/data/2.5/forecast?q=",result[[1]][1],",",result[[1]][2],"&APPID=36e53cd3a38129e9abdc5d13b71aa14a")))
       
     } else {
       
-      print(input$test)
+      result <- input$test
       
     }
     
-    print(getURL("api.openweathermap.org/data/2.5/forecast?q=Brentford,uk&APPID=36e53cd3a38129e9abdc5d13b71aa14a"))
+    print(result)
     
   })
   
