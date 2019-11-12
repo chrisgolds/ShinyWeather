@@ -1,15 +1,22 @@
 function getTextualLoc(long, lat) {
   
   var data = null;
+  var finalVal;
 
   var xhr = new XMLHttpRequest();
   xhr.withCredentials = true;
   
   xhr.addEventListener("readystatechange", function () {
-  	if (this.readyState === this.DONE) {
+    
+  	if (this.status === 200) {
   	  result = JSON.parse(this.responseText);
+  	  console.log("result");
+  		Shiny.setInputValue("test", result[0].City + ", " + result[0].CountryId);
   		document.getElementById("test").value = result[0].City + ", " + result[0].CountryId;
-  		console.log(result);
+  	} else {
+  	  
+  	  alert("Error - HTTP/XML request returned with status code: " + this.status);
+  	  
   	}
   });
   
