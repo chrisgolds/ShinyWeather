@@ -8,16 +8,13 @@ function getTextualLoc(long, lat) {
   
   xhr.addEventListener("readystatechange", function () {
     
-  	if (this.status == 200) {
+  	if (this.readyState == this.DONE) {
   	  result = JSON.parse(this.responseText);
   	  console.log("result");
   		Shiny.setInputValue("test", result[0].City + ", " + result[0].CountryId);
   		document.getElementById("test").value = result[0].City + ", " + result[0].CountryId;
-  	} else {
-  	  
-  	  alert("Error - HTTP/XML request returned with status code: " + this.status);
-  	  
   	}
+  	
   });
   
   xhr.open("GET", "https://geocodeapi.p.rapidapi.com/GetNearestCities?latitude=" + lat + "&longitude=" + long + "&range=0", true);
