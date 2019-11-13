@@ -14,7 +14,6 @@ server <- function(input, output, session) {
     
     if (grepl(",", input$test)) {
       
-      print(input$test)
       location.formatted <- str_split(input$test, ", ")
       result <- getURL(gsub(" ", "", paste("api.openweathermap.org/data/2.5/forecast?q=",location.formatted[[1]][1],",",location.formatted[[1]][2],"&APPID=36e53cd3a38129e9abdc5d13b71aa14a"), fixed = TRUE))
       
@@ -25,9 +24,7 @@ server <- function(input, output, session) {
       
     }
     
-    print(result)
     parsedResult <<- as.data.frame(fromJSON(result))
-    print(parsedResult)
     
     output$test <- renderText({
       

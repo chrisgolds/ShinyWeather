@@ -18,7 +18,7 @@ ui <- fluidPage(
   
   tags$br(),
   tags$br(),
-  sliderInput("time", "Hour", min = 00.00, max = 24.00, value = 14.00),
+  sliderInput("time", "Hour", min = 00.00, max = 24.00, value = ""),
   tags$h2(textOutput("test"))
 
 )

@@ -41,6 +41,7 @@ function getLoc() {
 
 window.onload = function () {
   
+  Shiny.setInputValue("time", new Date().getHours());
   getLoc();
   
 }
