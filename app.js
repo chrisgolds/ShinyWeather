@@ -10,7 +10,6 @@ function getTextualLoc(long, lat) {
     
   	if (this.readyState == this.DONE) {
   	  result = JSON.parse(this.responseText);
-  	  console.log("result");
   		Shiny.setInputValue("test", result[0].City + ", " + result[0].CountryId);
   		document.getElementById("test").value = result[0].City + ", " + result[0].CountryId;
   	}
@@ -41,7 +40,6 @@ function getLoc() {
 
 window.onload = function () {
   
-  Shiny.setInputValue("time", new Date().getHours());
   getLoc();
   
 }

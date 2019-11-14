@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyjs)
 
 ui <- fluidPage(
   
@@ -18,7 +19,8 @@ ui <- fluidPage(
   
   tags$br(),
   tags$br(),
-  sliderInput("time", "Hour", min = 00.00, max = 24.00, value = ""),
-  tags$h2(textOutput("test"))
+  uiOutput("timeOut"),
+  tags$h2(textOutput("test")),
+  uiOutput("weatherData")
 
 )
