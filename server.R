@@ -94,12 +94,6 @@ server <- function(input, output, session) {
       
     })
     
-    weatherData <- function() {
-      
-      #TODO
-      
-    }
-    
     output$weatherData <- renderUI({
       
       print("Function invoked")
@@ -191,6 +185,8 @@ server <- function(input, output, session) {
           i <- i + 1
           
         }
+        
+        return(tags$h3("Weather data not avaialble at this time"))
         
       }
       
