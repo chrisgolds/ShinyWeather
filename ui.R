@@ -20,7 +20,7 @@ ui <- fluidPage(
   tags$br(),
   tags$br(),
   uiOutput("timeOut"),
-  tags$h2(textOutput("test")),
+  uiOutput("header"),
   uiOutput("weatherData")
 
 )

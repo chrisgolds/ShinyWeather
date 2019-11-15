@@ -30,91 +30,108 @@ server <- function(input, output, session) {
     parsedResult <<- as.data.frame(fromJSON(result))
     print(parsedResult)
     
-    output$test <- renderText({
+    output$header <- renderUI({
       
-      paste("Weather in ", parsedResult$city.name, ", ", parsedResult$city.country, sep = "")
+      tags$div(tags$h2(paste(parsedResult$city.name, ", ", parsedResult$city.country, sep = "")),
+               tags$h4(paste("Sunrise: ", format(as.POSIXct(parsedResult$city.sunrise + parsedResult$city.timezone, origin="1970-01-01"), "%H:%M"))),
+               tags$h4(paste("Sunset: ", format(as.POSIXct(parsedResult$city.sunset + + parsedResult$city.timezone, origin="1970-01-01"), "%H:%M")))
+               )
       
     })
     
-  })
-  
-  plotSlider <- eventReactive(input$getForecast, {
-    
-    if (UI.output.flag == FALSE) {
+    output$timeOut <- renderUI({
       
-      UI.output.flag <<- TRUE
-      date.formatted <- str_split(Sys.time(), " ")
-      hour <- RoundTo(as.numeric(format(strptime(date.formatted[[1]][2], "%H:%M:%S"), '%H')), 3)
+      slidetitle <- paste("UTC Hour - (Current time is ", format(as.POSIXct(Sys.time()), "%H:%M"), ")", sep = "")
+      hour <- format(as.POSIXct(parsedResult$list.dt, origin="1970-01-01"), "%H")
       
-      tags$div(actionButton(inputId = "day", label = "Today!"),
-               sliderInput(inputId = "time", "Hour", min = 00, max = 21, value = hour, step = 3)
+      if (UI.output.flag == FALSE) {
+        
+        UI.output.flag <<- TRUE
+        tags$div(sliderInput(inputId = "time", slidetitle, min = 00, max = 21, value = hour, step = 3)
+                 
       )
-    
-    } else {
+        
+      } else {
+        
+        tags$div(sliderInput(inputId = "time", slidetitle, min = 00, max = 21, value = input$time, step = 3))
+        
+      }
       
-      tags$div(actionButton(inputId = "day", label = "Today!"),
-               sliderInput(inputId = "time", "Hour", min = 00, max = 21, value = input$time, step = 3)
-      )
+    })
+    
+    plotWeatherData <- eventReactive(input$time, {
       
-    }
-  
-  })
-  
-  
-  output$timeOut <- renderUI({
-    
-    plotSlider()
-    
-  })
-  
-  
-  plotWeatherData <- eventReactive(input$time, {
-    
-    timePeriod <- NULL
-    
-    if (input$time == 0) {
+      timePeriod <- NULL
       
-      timePeriod <- paste(input$time, "0:00:00", sep = "")
+      if (input$time == 0) {
+        
+        timePeriod <- paste(input$time, "0:00:00", sep = "")
+        
+      } else if (input$time == 3 || input$time == 6 || input$time == 9) {
+        
+        timePeriod <- paste("0", input$time, ":00:00", sep = "")
       
-    } else if (input$time == 24) {
+      } else if (input$time == 24) {
+        
+        timePeriod <- "00:00:00"
+        
+      } else {
+        
+        timePeriod <- paste(input$time, ":00:00", sep = "")
+        
+      }
       
-      timePeriod <- "00:00:00"
-    
-    } else {
+      datePeriod <- format(Sys.Date(), "%d/%m/%y") #Change to input$day soon
+      print(datePeriod)
       
-      timePeriod <- paste(input$time, ":00:00", sep = "")
+      JSONTime <- format(as.POSIXct(parsedResult$list.dt, origin="1970-01-01"), "%H:%M:%S")
+      JSONDate <- format(as.POSIXct(parsedResult$list.dt, origin="1970-01-01"), "%d/%m/%y")
       
-    }
-    
-    print(timePeriod)
-    
-    
-    firstDateAndTime <- str_split(parsedResult[,'list.dt_txt'], " ")
-    
-    p.time <- format(Sys.Date(), "%Y-%m-%d")
-    p.time <- paste(p.time, timePeriod)
-    
-    if (identical(timePeriod, firstDateAndTime[[1]][2])) {
+      if (identical(timePeriod, JSONTime) && identical(datePeriod, JSONDate)) {
+        
+        tags$div(tags$h3(format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, origin="1970-01-01"), "%d/%m/%y %H:%M"),
+                         " - Modified for UTC offsets"),
+                 tags$img(src = paste("http://openweathermap.org/img/wn/", parsedResult$list.weather.icon,"@2x.png", sep = "")),
+                 tags$div(style = "display: inline-block",
+                          tags$h3(parsedResult$list.weather.main),
+                          tags$h4(paste(trunc(parsedResult$list.main.temp - 273.15), "\u2103", sep = ""))
+                 )
+        )
+        
+      } else {
+        
+        i <- 1
+        while (i < parsedResult$cnt) {
+          
+          JSONTime <- format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')], origin="1970-01-01"), "%H:%M:%S")
+          JSONDate <- format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')], origin="1970-01-01"), "%d/%m/%y")
+          
+          if (identical(timePeriod, JSONTime) && identical(datePeriod, JSONDate)) {
+            
+            return (tags$div(tags$h3(format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, origin="1970-01-01"), "%d/%m/%y %H:%M"),
+                                     " - Modified for UTC offsets"),
+                             tags$img(src = paste("http://openweathermap.org/img/wn/", parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = "")),
+                             tags$div(style = "display: inline-block",
+                                      tags$h3(parsedResult[,paste('list.weather.main.',i,sep='')]),
+                                      tags$h4(paste(trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15), "\u2103", sep = ""))
+                     )
+            ))
+            
+          }
+          
+          i <- i + 1
+          
+        }
+        
+      }
       
-      print('first')
-      #First object can be used
-      tags$div(tags$img(src = paste("http://openweathermap.org/img/wn/", parsedResult$list.weather.icon,"@2x.png", sep = "")),
-               tags$h3(parsedResult$list.weather.main),
-               tags$h4(paste(trunc(parsedResult$list.main.temp - 273.15), "\u2103", sep = ""))
-      )
-      
-    } else {
-      
-      print('second')
-      #Another object has to be used
-      
-    }
+    })
     
-  })
-  
-  output$weatherData <- renderUI({
-    
-    plotWeatherData()
+    output$weatherData <- renderUI({
+      
+      plotWeatherData()
+      
+    })
     
   })
   
