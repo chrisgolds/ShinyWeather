@@ -2,7 +2,7 @@ library(shiny)
 library(RCurl)
 library(stringr)
 library(rjson)
-library(DescTools)
+library(countrycode)
 
 parsedResult <- NULL
 
@@ -39,7 +39,7 @@ server <- function(input, output, session) {
     
     output$header <- renderUI({
       
-      tags$div(tags$h2(paste(parsedResult$city.name, ", ", parsedResult$city.country, sep = "")),
+      tags$div(tags$h2(paste(parsedResult$city.name, ", ", countrycode(parsedResult$city.country, origin = "iso2c", destination = "country.name"), sep = "")),
                tags$h4(paste("Sunrise: ", format(as.POSIXct(parsedResult$city.sunrise + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M"))),
                tags$h4(paste("Sunset: ", format(as.POSIXct(parsedResult$city.sunset + + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")))
                )
@@ -90,7 +90,16 @@ server <- function(input, output, session) {
       }
       
       selecttitle <- paste("UTC Day - (Current day is ", format(UTC.time, "%d/%m/%y"), ")", sep = "")
-      tags$div(selectInput(inputId = "day", selecttitle, choices = formatted.dates))
+      
+      if (!(isTruthy(input$day))) {
+        
+        tags$div(selectInput(inputId = "day", selecttitle, choices = formatted.dates))
+        
+      } else {
+        
+        tags$div(selectInput(inputId = "day", selecttitle, choices = formatted.dates, selected = input$day))
+        
+      }
       
     })
     
@@ -127,7 +136,7 @@ server <- function(input, output, session) {
         
         tags$div(tags$h3(format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
                          " - Modified for UTC offsets"),
-                 tags$img(src = paste("http://openweathermap.org/img/wn/", parsedResult$list.weather.icon,"@2x.png", sep = ""), align = "top"),
+                 tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", parsedResult$list.weather.icon,"@2x.png", sep = ""), align = "top"),
                  tags$div(style = "display: inline-block",
                           tags$h3(parsedResult$list.weather.main),
                           tags$h4(trunc(parsedResult$list.main.temp - 273.15), "\u2103")),
@@ -159,7 +168,7 @@ server <- function(input, output, session) {
             
             return (tags$div(tags$h3(format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
                                      " - Modified for UTC offsets"),
-                             tags$img(src = paste("http://openweathermap.org/img/wn/", parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = ""), align = "top"),
+                             tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = ""), align = "top"),
                              tags$div(style = "display: inline-block",
                                       tags$h3(parsedResult[,paste('list.weather.main.',i,sep='')]),
                                       tags$h4(trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15), "\u2103")),
