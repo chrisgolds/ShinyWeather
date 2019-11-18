@@ -29,18 +29,20 @@ ui <- dashboardPage(
         tags$br(),
         uiOutput("timeOut"),
         uiOutput("dayOut"),
-        uiOutput("header"),
         uiOutput("weatherData")
         
       ),
       
       column(width = 5,
       
-        leafletOutput("map")       
+        uiOutput("header"),
+        leafletOutput("map")
              
       )
       
     )
+    
+    
     
   )
 
