@@ -42,7 +42,7 @@ server <- function(input, output, session) {
       
       tags$div(tags$h2(paste(parsedResult$city.name, ", ", countrycode(parsedResult$city.country, origin = "iso2c", destination = "country.name"), sep = "")),
                tags$h4(paste("Sunrise: ", format(as.POSIXct(parsedResult$city.sunrise + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M"))),
-               tags$h4(paste("Sunset: ", format(as.POSIXct(parsedResult$city.sunset + + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")))
+               tags$h4(paste("Sunset: ", format(as.POSIXct(parsedResult$city.sunset + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")))
                )
       
     })
@@ -104,6 +104,8 @@ server <- function(input, output, session) {
       
     })
     
+    mapData <- reactiveValues(temp=NULL,main=NULL)
+    
     output$weatherData <- renderUI({
       
       print("Function invoked")
@@ -128,15 +130,34 @@ server <- function(input, output, session) {
         
       }
       
-      datePeriod <- input$day #Change to input$day soon
+      datePeriod <- input$day
+      
+      UTC.offset <- 0
+      UTC.offset.string <- NULL
+      if (parsedResult$city.timezone >= 0) {
+        
+        UTC.offset <- parsedResult$city.timezone
+        UTC.offset.string <- "+"
+        
+      } else {
+        
+        UTC.offset <- abs(parsedResult$city.timezone)
+        UTC.offset.string <- "-"
+        
+      }
+      
+      UTC.offset <- format(as.POSIXct(UTC.offset, tz = "UTC", origin="1970-01-01"), "%H")
       
       JSONTime <- format(as.POSIXct(parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%H:%M:%S")
       JSONDate <- format(as.POSIXct(parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
       
       if (identical(timePeriod, JSONTime) && identical(datePeriod, JSONDate)) {
         
+        mapData$main <- parsedResult$list.weather.main
+        mapData$temp <- trunc(parsedResult$list.main.temp - 273.15)
+        
         tags$div(tags$h3(format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
-                         " - Modified for UTC offsets"),
+                         " - UTC", UTC.offset.string, UTC.offset),
                  tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", parsedResult$list.weather.icon,"@2x.png", sep = ""), align = "top"),
                  tags$div(style = "display: inline-block",
                           tags$h3(id = "currentMain", parsedResult$list.weather.main),
@@ -167,8 +188,11 @@ server <- function(input, output, session) {
           
           if (identical(timePeriod, JSONTime) && identical(datePeriod, JSONDate)) {
             
-            return (tags$div(tags$h3(format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
-                                     " - Modified for UTC offsets"),
+            mapData$main <- parsedResult[,paste('list.weather.main.',i,sep='')]
+            mapData$temp <- trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15)
+            
+            return(tags$div(tags$h3(format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
+                                    " - UTC", UTC.offset.string, UTC.offset),
                              tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = ""), align = "top"),
                              tags$div(style = "display: inline-block",
                                       tags$h3(id = "currentMain", parsedResult[,paste('list.weather.main.',i,sep='')]),
@@ -202,17 +226,24 @@ server <- function(input, output, session) {
       
     })
     
+    plotMap <- reactive({
+      
+      
+      
+    })
+    
     output$map <- renderLeaflet({
       
-      print("plot map")
+      print("test")
       
-      map <- leaflet(height = "100%") %>%
+      map <- leaflet() %>%
         addTiles() %>%
         setView(lat = parsedResult$city.coord.lat,
                 lng = parsedResult$city.coord.lon,
                 zoom = 11) %>%
         addMarkers(lat = parsedResult$city.coord.lat,
-                   lng = parsedResult$city.coord.lon)
+                   lng = parsedResult$city.coord.lon,
+                   popup = paste(mapData$temp,"\u2103"," -",mapData$main))
       map
       
     })
