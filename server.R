@@ -3,6 +3,7 @@ library(RCurl)
 library(stringr)
 library(rjson)
 library(countrycode)
+library(leaflet)
 
 parsedResult <- NULL
 
@@ -138,8 +139,8 @@ server <- function(input, output, session) {
                          " - Modified for UTC offsets"),
                  tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", parsedResult$list.weather.icon,"@2x.png", sep = ""), align = "top"),
                  tags$div(style = "display: inline-block",
-                          tags$h3(parsedResult$list.weather.main),
-                          tags$h4(trunc(parsedResult$list.main.temp - 273.15), "\u2103")),
+                          tags$h3(id = "currentMain", parsedResult$list.weather.main),
+                          tags$h3(id = "currentTemp", trunc(parsedResult$list.main.temp - 273.15), "\u2103")),
                  tags$div(style = "display: inline-block; padding: 10px",
                           tags$h4(
                             tags$span(class = "glyphicon glyphicon-arrow-down"),
@@ -170,8 +171,8 @@ server <- function(input, output, session) {
                                      " - Modified for UTC offsets"),
                              tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = ""), align = "top"),
                              tags$div(style = "display: inline-block",
-                                      tags$h3(parsedResult[,paste('list.weather.main.',i,sep='')]),
-                                      tags$h4(trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15), "\u2103")),
+                                      tags$h3(id = "currentMain", parsedResult[,paste('list.weather.main.',i,sep='')]),
+                                      tags$h3(id = "currentTemp", trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15), "\u2103")),
                              tags$div(style = "display: inline-block; padding: 10px",
                                       tags$h4(
                                         tags$span(class = "glyphicon glyphicon-arrow-down"),
@@ -198,6 +199,21 @@ server <- function(input, output, session) {
         return(tags$h3("Weather data not avaialble at this time"))
         
       }
+      
+    })
+    
+    output$map <- renderLeaflet({
+      
+      print("plot map")
+      
+      map <- leaflet(height = "100%") %>%
+        addTiles() %>%
+        setView(lat = parsedResult$city.coord.lat,
+                lng = parsedResult$city.coord.lon,
+                zoom = 11) %>%
+        addMarkers(lat = parsedResult$city.coord.lat,
+                   lng = parsedResult$city.coord.lon)
+      map
       
     })
     
