@@ -4,6 +4,7 @@ library(stringr)
 library(rjson)
 library(countrycode)
 library(leaflet)
+library(ggplot2)
 
 parsedResult <- NULL
 
@@ -234,8 +235,6 @@ server <- function(input, output, session) {
     
     output$map <- renderLeaflet({
       
-      print("test")
-      
       map <- leaflet() %>%
         addTiles() %>%
         setView(lat = parsedResult$city.coord.lat,
@@ -247,6 +246,50 @@ server <- function(input, output, session) {
       map
       
     })
+    
+    output$graphHead <- renderUI({
+      
+      tags$h3(paste("Graphs and charts for ", parsedResult$city.name, ", ", countrycode(parsedResult$city.country, origin = "iso2c", destination = "country.name"), sep = ""))
+      
+    })
+    
+    output$graphs <- renderPlot({
+      
+      tempTodayData <- vector(mode = "numeric")
+      tempTodayLabels <- vector(mode = "character")
+      JSONDate <- input$day
+      i <- 1
+      index <- 1
+      while (index < parsedResult$cnt) {
+        
+        if (identical(JSONDate, format(as.POSIXct(parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")) && length(tempTodayData) == 0 && length(tempTodayLabels) == 0) {
+          
+          tempTodayData[i] <- trunc(parsedResult$list.main.temp - 273.15)
+          tempTodayLabels[i] <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          i <- i + 1
+          index <- index - 1
+          
+        } else if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')], tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
+          
+          tempTodayData[i] <- trunc(parsedResult[,paste('list.main.temp.',index,sep='')] - 273.15)
+          tempTodayLabels[i] <- format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          i <- i + 1
+          
+        }
+        
+        index <- index + 1
+        
+      }
+      
+      tempTodayDF <- data.frame(time = tempTodayLabels, temp = tempTodayData)
+      tempTodayDF$temp <- as.factor(tempTodayDF$temp)
+      
+      ggplot(data = tempTodayDF, aes(x = time, y = temp, group = "temp")) +
+        geom_line(color = '#3c8dbc') + 
+        geom_point(color = '#3c8dbc')
+      
+    })
+    
     
   })
   

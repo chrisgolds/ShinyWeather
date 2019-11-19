@@ -40,9 +40,19 @@ ui <- dashboardPage(
              
       )
       
+    ),
+    
+    tags$br(),
+    
+    fluidRow(
+      
+      #TODO
+      column(width = 6,
+             uiOutput("graphHead"),
+             plotOutput("graphs")
+      )
+      
     )
-    
-    
     
   )
 
