@@ -286,7 +286,16 @@ server <- function(input, output, session) {
       
       ggplot(data = tempTodayDF, aes(x = time, y = temp, group = "temp")) +
         geom_line(color = '#3c8dbc') + 
-        geom_point(color = '#3c8dbc')
+        geom_point(color = '#3c8dbc') +
+        labs(title = paste("Temperatures in ",parsedResult$city.name," - ",JSONDate), y = "Temperature \u2103", x = "Time") +
+        theme(
+          
+          panel.background = element_rect(fill = "transparent"),
+          panel.grid.major = element_line(color = "black", size = 0.2),
+          plot.background =  element_rect(fill = "#ecf0f5"),
+          plot.title = element_text(size = 20)
+          
+        )
       
     })
     
