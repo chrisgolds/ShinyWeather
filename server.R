@@ -297,7 +297,6 @@ server <- function(input, output, session) {
       }
       
       tempTodayDF <- data.frame(time = tempTodayLabels, temp = tempTodayData)
-      tempTodayDF$temp <- as.factor(tempTodayDF$temp)
       return (tempTodayDF)
       
     }
@@ -347,7 +346,104 @@ server <- function(input, output, session) {
       }
       
       avgTempFiveDaysDF <- data.frame(day = avgsLabels, temp = avgs)
-      avgTempFiveDaysDF$temp <- as.factor(avgTempFiveDaysDF$temp)
+      return(avgTempFiveDaysDF)
+      
+    }
+    
+    plotPercentages <- function(JSONDate) {
+      
+      humidityOrCloud <- vector(mode = "character")
+      percentage <- vector(mode = "numeric")
+      percentageTodayLabels <- vector(mode = "character")
+      i <- 1
+      index <- 1
+      while (index < parsedResult$cnt) {
+        
+        if (identical(JSONDate, format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")) &&
+            length(humidityOrCloud) == 0 &&
+            length(percentage) == 0 &&
+            length(percentageTodayLabels) == 0) {
+          
+          humidityOrCloud[i] <- "Humidity"
+          percentage[i] <- parsedResult$list.main.humidity
+          percentageTodayLabels[i] <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          i <- i + 1
+          
+          humidityOrCloud[i] <- "Cloud Coverage"
+          percentage[i] <- parsedResult$list.all
+          percentageTodayLabels[i] <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          i <- i + 1
+          
+          index <- index - 1
+          
+        } else if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
+          
+          humidityOrCloud[i] <- "Humidity"
+          percentage[i] <- parsedResult[,paste('list.main.humidity.',index,sep='')]
+          percentageTodayLabels[i] <- format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          i <- i + 1
+          
+          humidityOrCloud[i] <- "Cloud Coverage"
+          percentage[i] <- parsedResult[,paste('list.all.',index,sep='')]
+          percentageTodayLabels[i] <- format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          i <- i + 1
+          
+        }
+        
+        index <- index + 1
+        
+      }
+      
+      percentageTodayDF <- data.frame(time = percentageTodayLabels, legend = humidityOrCloud, perc = percentage)
+      return(percentageTodayDF)
+      
+    }
+    
+    plotAvgPercentages <- function() {
+      
+      avgType <- vector(mode = "character")
+      avgPerc <- vector(mode = "numeric")
+      avgsLabels <- vector(mode = "character")
+      avgsIndex <- 1
+      
+      JSONDate <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+      avgsLabels[avgsIndex] <- JSONDate
+      workingAvg <- parsedResult$list.main.temp - 273.15
+      avgCount <- 1
+      i <- 1
+      
+      while (i < parsedResult$cnt) {
+        
+        if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
+          
+          workingAvg <- workingAvg + as.numeric(trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15))
+          avgCount <- avgCount + 1
+          
+        } else {
+          
+          avgs[avgsIndex] <- trunc(workingAvg / avgCount)
+          avgsIndex <- avgsIndex + 1
+          
+          JSONDate <- format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+          avgsLabels[avgsIndex] <- JSONDate
+          workingAvg <- 0
+          avgCount <- 0
+          
+          i <- i - 1
+          
+        }
+        
+        if (i + 1 == parsedResult$cnt) {
+          
+          avgs[avgsIndex] <- trunc(workingAvg / avgCount)
+          
+        }
+        
+        i <- i + 1
+        
+      }
+      
+      avgTempFiveDaysDF <- data.frame(day = avgsLabels, temp = avgs)
       return(avgTempFiveDaysDF)
       
     }
@@ -394,6 +490,30 @@ server <- function(input, output, session) {
           
         ) +
         scale_x_discrete(limits = avgTempFiveDaysDF$day)
+      
+    })
+    
+    output$plotPercentages <- renderPlot({
+      
+      JSONDate <- input$day
+      percentageTodayDF <- plotPercentages(JSONDate)
+      
+      req(percentageTodayDF$time, percentageTodayDF$legend, percentageTodayDF$perc)
+      
+      bar_chart <- ggplot(data = percentageTodayDF, aes(x = time, y = perc, fill = legend)) +
+        geom_bar(stat = "identity", position = position_dodge()) +
+        scale_fill_manual(values = c("#3c8dbc", "#222d32")) +
+        labs(title = paste("Humidity and Cloud Coverage in ",parsedResult$city.name, sep = ""), y = "Percentage (%)", x = "Time") +
+        theme(
+          
+          panel.background =  element_rect(fill = "white"),
+          panel.border = element_rect(fill = "transparent", colour = "black"),
+          plot.background = element_rect(fill = "#ecf0f5", colour = "#ecf0f5"),
+          text = element_text(family = "Helvetica")
+          
+        )
+      
+      bar_chart
       
     })
     

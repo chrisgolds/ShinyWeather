@@ -60,6 +60,19 @@ ui <- dashboardPage(
              
              plotOutput("plotFiveDayAvg"))
       
+    ),
+    
+    fixedRow(
+      
+      column(width = 6,
+             
+             plotOutput("plotPercentages")
+      ),
+      
+      column(width = 5,
+             
+             plotOutput("plotAvgPercentages"))
+      
     )
     
   )
