@@ -105,7 +105,7 @@ server <- function(input, output, session) {
       
     })
     
-    mapData <- reactiveValues(temp=NULL,main=NULL)
+    mapData <- reactiveValues(temp=NULL,main=NULL,icon=NULL)
     
     output$weatherData <- renderUI({
       
@@ -156,6 +156,7 @@ server <- function(input, output, session) {
         
         mapData$main <- parsedResult$list.weather.main
         mapData$temp <- trunc(parsedResult$list.main.temp - 273.15)
+        mapData$icon <- paste("http://openweathermap.org/img/wn/", parsedResult$list.weather.icon,"@2x.png", sep = "")
         
         tags$div(tags$h3(format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
                          " - UTC", UTC.offset.string, UTC.offset),
@@ -191,6 +192,7 @@ server <- function(input, output, session) {
             
             mapData$main <- parsedResult[,paste('list.weather.main.',i,sep='')]
             mapData$temp <- trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15)
+            mapData$icon <- paste("http://openweathermap.org/img/wn/", parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = "")
             
             return(tags$div(tags$h3(format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
                                     " - UTC", UTC.offset.string, UTC.offset),
@@ -227,13 +229,12 @@ server <- function(input, output, session) {
       
     })
     
-    plotMap <- reactive({
-      
-      
-      
-    })
-    
     output$map <- renderLeaflet({
+      
+      mapIcon <- makeIcon(
+        iconUrl = mapData$icon,
+        iconAnchorX = 50,
+        iconAnchorY = 50)
       
       map <- leaflet() %>%
         addTiles() %>%
@@ -242,8 +243,23 @@ server <- function(input, output, session) {
                 zoom = 11) %>%
         addMarkers(lat = parsedResult$city.coord.lat,
                    lng = parsedResult$city.coord.lon,
-                   popup = paste(mapData$temp,"\u2103"," -",mapData$main))
+                   popup = paste(mapData$temp,"\u2103"," -",mapData$main),
+                   icon = mapIcon)
       map
+      
+    })
+    
+    output$pinnedWeather <- renderUI({
+      
+      actionButton(inputId = "pinnedWeatherHandle", class = "btn btn-success", label = "Update location", width = "100%")
+      
+    })
+    
+    observeEvent(input$map_click, {
+      
+      leafletProxy("map") %>%
+        removeMarker(layerId = "current") %>%
+        addMarkers(lat = input$map_click$lat, lng = input$map_click$lng, layerId = "current")
       
     })
     
@@ -253,23 +269,22 @@ server <- function(input, output, session) {
       
     })
     
-    output$graphs <- renderPlot({
+    plotDayTemp <- function(JSONDate) {
       
       tempTodayData <- vector(mode = "numeric")
       tempTodayLabels <- vector(mode = "character")
-      JSONDate <- input$day
       i <- 1
       index <- 1
       while (index < parsedResult$cnt) {
         
-        if (identical(JSONDate, format(as.POSIXct(parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")) && length(tempTodayData) == 0 && length(tempTodayLabels) == 0) {
+        if (identical(JSONDate, format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")) && length(tempTodayData) == 0 && length(tempTodayLabels) == 0) {
           
           tempTodayData[i] <- trunc(parsedResult$list.main.temp - 273.15)
           tempTodayLabels[i] <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
           i <- i + 1
           index <- index - 1
           
-        } else if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')], tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
+        } else if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
           
           tempTodayData[i] <- trunc(parsedResult[,paste('list.main.temp.',index,sep='')] - 273.15)
           tempTodayLabels[i] <- format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
@@ -283,22 +298,104 @@ server <- function(input, output, session) {
       
       tempTodayDF <- data.frame(time = tempTodayLabels, temp = tempTodayData)
       tempTodayDF$temp <- as.factor(tempTodayDF$temp)
+      return (tempTodayDF)
       
-      ggplot(data = tempTodayDF, aes(x = time, y = temp, group = "temp")) +
-        geom_line(color = '#3c8dbc') + 
-        geom_point(color = '#3c8dbc') +
-        labs(title = paste("Temperatures in ",parsedResult$city.name," - ",JSONDate), y = "Temperature \u2103", x = "Time") +
+    }
+    
+    plotFiveDayAvgTemp <- function() {
+      
+      avgs <- vector(mode = "numeric")
+      avgsLabels <- vector(mode = "character")
+      avgsIndex <- 1
+      
+      JSONDate <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+      print(JSONDate)
+      avgsLabels[avgsIndex] <- JSONDate
+      workingAvg <- parsedResult$list.main.temp - 273.15
+      avgCount <- 1
+      i <- 1
+      
+      while (i < parsedResult$cnt) {
+        
+        if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
+          
+          workingAvg <- workingAvg + as.numeric(trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15))
+          avgCount <- avgCount + 1
+          
+        } else {
+          
+          avgs[avgsIndex] <- trunc(workingAvg / avgCount)
+          avgsIndex <- avgsIndex + 1
+          
+          JSONDate <- format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+          avgsLabels[avgsIndex] <- JSONDate
+          workingAvg <- 0
+          avgCount <- 0
+          
+          i <- i - 1
+          
+        }
+        
+        if (i + 1 == parsedResult$cnt) {
+          
+          avgs[avgsIndex] <- trunc(workingAvg / avgCount)
+          
+        }
+        
+        i <- i + 1
+        
+      }
+      
+      avgTempFiveDaysDF <- data.frame(day = avgsLabels, temp = avgs)
+      avgTempFiveDaysDF$temp <- as.factor(avgTempFiveDaysDF$temp)
+      return(avgTempFiveDaysDF)
+      
+    }
+    
+    output$plotDayTemp <- renderPlot({
+      
+      JSONDate <- input$day
+      tempTodayDF <- plotDayTemp(JSONDate)
+      
+      req(tempTodayDF$time, tempTodayDF$temp)
+      
+      line_graph <- ggplot(data = tempTodayDF, aes(x = time, y = temp, group = "1")) +
+        geom_line(stat = "identity", color = '#3c8dbc', se=FALSE) + 
+        geom_point(color = '#3c8dbc', size = 3) +
+        labs(title = paste("Temperatures in ",parsedResult$city.name," - ",JSONDate, sep = ""), y = "Temperature \u2103", x = "Time") +
         theme(
           
-          panel.background = element_rect(fill = "transparent"),
-          panel.grid.major = element_line(color = "black", size = 0.2),
-          plot.background =  element_rect(fill = "#ecf0f5"),
-          plot.title = element_text(size = 20)
+          panel.background =  element_rect(fill = "white"),
+          panel.border = element_rect(fill = "transparent", colour = "black"),
+          plot.background = element_rect(fill = "#ecf0f5", colour = "#ecf0f5"),
+          text = element_text(family = "Helvetica")
           
-        )
+        ) +
+        scale_x_discrete(limits = tempTodayDF$time)
+      
+      line_graph
       
     })
     
+    output$plotFiveDayAvg <- renderPlot({
+      
+      avgTempFiveDaysDF <- plotFiveDayAvgTemp()
+      
+      ggplot(data = avgTempFiveDaysDF, aes(x = day, y = temp, group = "1")) +
+        geom_smooth(method=lm, se=FALSE, color = 'red') + 
+        geom_point(color = 'red', size = 3) +
+        labs(title = paste("Average temperature in ",parsedResult$city.name, sep = ""), y = "Temperature \u2103", x = "Day") +
+        theme(
+          
+          panel.background =  element_rect(fill = "white"),
+          panel.border = element_rect(fill = "transparent", colour = "black"),
+          plot.background = element_rect(fill = "#ecf0f5", colour = "#ecf0f5"),
+          text = element_text(family = "Helvetica")
+          
+        ) +
+        scale_x_discrete(limits = avgTempFiveDaysDF$day)
+      
+    })
     
   })
   

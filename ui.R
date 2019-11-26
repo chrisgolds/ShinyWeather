@@ -9,7 +9,9 @@ ui <- dashboardPage(
   dashboardSidebar(),
   dashboardBody(
     
-    fluidRow(
+    useShinyjs(),
+    
+    fixedRow(
       
       column(width = 6,
         
@@ -36,21 +38,27 @@ ui <- dashboardPage(
       column(width = 5,
       
         uiOutput("header"),
-        leafletOutput("map")
+        tags$br(),
+        leafletOutput("map"),
+        uiOutput("pinnedWeather")
              
       )
       
     ),
     
     tags$br(),
+    uiOutput("graphHead"),
     
-    fluidRow(
+    fixedRow(
       
-      #TODO
+      
       column(width = 6,
-             uiOutput("graphHead"),
-             plotOutput("graphs")
-      )
+             plotOutput("plotDayTemp")
+      ),
+      
+      column(width = 5,
+             
+             plotOutput("plotFiveDayAvg"))
       
     )
     
