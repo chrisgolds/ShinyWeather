@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyjs)
 library(RCurl)
 library(stringr)
 library(rjson)
@@ -6,7 +7,41 @@ library(countrycode)
 library(leaflet)
 library(ggplot2)
 
-parsedResult <- NULL
+JSON_data <- reactiveValues(parsedResult = NULL)
+UTC.time <- NULL
+
+getData <- function(str_loc, is_update_loc) {
+  
+  UTC.time <<- Sys.time()
+  attr(UTC.time, "tzone") <- "UTC"
+  
+  location.formatted <- NULL
+  result <- NULL
+  
+  if (is_update_loc) {
+    
+    location.formatted <- str_split(str_loc, ",")
+    result <- getURL(paste("api.openweathermap.org/data/2.5/forecast?lat=",location.formatted[[1]][1],"&lon=",location.formatted[[1]][2],"&APPID=36e53cd3a38129e9abdc5d13b71aa14a", sep = ""))
+    
+  } else {
+    
+    if (grepl(",", str_loc)) {
+      
+      location.formatted <- str_split(str_loc, ", ")
+      result <- getURL(paste("api.openweathermap.org/data/2.5/forecast?q=",gsub(" ", "%20",location.formatted[[1]][1],fixed = TRUE),",",location.formatted[[1]][2],"&APPID=36e53cd3a38129e9abdc5d13b71aa14a", sep = ""))
+      
+    } else {
+      
+      location.formatted <- str_loc
+      result <- getURL(gsub(" ", "%20", paste("api.openweathermap.org/data/2.5/forecast?q=",str_loc,"&APPID=36e53cd3a38129e9abdc5d13b71aa14a", sep = ""), fixed = TRUE))
+      
+    }
+    
+  }
+  
+  JSON_data$parsedResult <<- as.data.frame(fromJSON(result))
+  
+}
 
 server <- function(input, output, session) {
   
@@ -18,40 +53,66 @@ server <- function(input, output, session) {
     progress$set(message = 'Calculation in progress',
                  detail = 'This may take a while...')
     
-    UTC.time <- Sys.time()
-    attr(UTC.time, "tzone") <- "UTC"
-    
-    location.formatted <- NULL
-    result <- NULL
-    
-    if (grepl(",", input$test)) {
-      
-      location.formatted <- str_split(input$test, ", ")
-      result <- getURL(gsub(" ", "", paste("api.openweathermap.org/data/2.5/forecast?q=",gsub(" ", "%20",location.formatted[[1]][1],fixed = TRUE),",",location.formatted[[1]][2],"&APPID=36e53cd3a38129e9abdc5d13b71aa14a", sep = ""), fixed = TRUE))
-      
-    } else {
-      
-      location.formatted <- input$test
-      result <- getURL(gsub(" ", "%20", paste("api.openweathermap.org/data/2.5/forecast?q=",input$test,"&APPID=36e53cd3a38129e9abdc5d13b71aa14a", sep = ""), fixed = TRUE))
-      
-    }
-    
-    parsedResult <<- as.data.frame(fromJSON(result))
-    print(parsedResult)
+    getData(input$test, FALSE)
     
     output$header <- renderUI({
       
-      tags$div(tags$h2(paste(parsedResult$city.name, ", ", countrycode(parsedResult$city.country, origin = "iso2c", destination = "country.name"), sep = "")),
-               tags$h4(paste("Sunrise: ", format(as.POSIXct(parsedResult$city.sunrise + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M"))),
-               tags$h4(paste("Sunset: ", format(as.POSIXct(parsedResult$city.sunset + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")))
+      maxAndMin <- plotFiveDayAvgTemp()
+      print(maxAndMin)
+      
+      max <- maxAndMin$temp[1]
+      maxDate <- maxAndMin$day[1]
+      index <- 2
+      
+      while (index <= nrow(maxAndMin)) {
+        
+        if (maxAndMin$temp[index] > max) {
+          
+          max <- maxAndMin$temp[index]
+          maxDate <- maxAndMin$day[index]
+          
+        }
+        
+        index <- index + 1
+        
+      }
+      
+      min <- max
+      minDate <- maxDate
+      index <- 1
+      
+      while (index <= nrow(maxAndMin)) {
+        
+        if (maxAndMin$temp[index] < min) {
+          
+          min <- maxAndMin$temp[index]
+          minDate <- maxAndMin$day[index]
+          
+        }
+        
+        index <- index + 1
+        
+      }
+      
+      tags$div(tags$h2(paste(JSON_data$parsedResult$city.name, ", ", countrycode(JSON_data$parsedResult$city.country, origin = "iso2c", destination = "country.name"), sep = "")),
+               tags$div(class = "row",
+                 tags$div(class = "col-sm-6",
+                   tags$h4(paste("Sunrise:", format(as.POSIXct(JSON_data$parsedResult$city.sunrise + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M"))),
+                   tags$h4(paste("Sunset:", format(as.POSIXct(JSON_data$parsedResult$city.sunset + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")))
+                 ),
+                 tags$div(class = "col-sm-6",
+                   tags$h4(paste("Warmest day:", maxDate, "(", max, "\u2103", ")")),
+                   tags$h4(paste("Coldest day:", minDate, "(", min, "\u2103", ")"))
+                 )
                )
+              )
       
     })
     
     output$timeOut <- renderUI({
       
       slidetitle <- paste("UTC Hour - (Current time is ", format(UTC.time, "%H:%M"), ")", sep = "")
-      hour <- format(as.POSIXct(parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%H")
+      hour <- format(as.POSIXct(JSON_data$parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%H")
       
       if (!(isTruthy(input$time))) {
         
@@ -72,13 +133,13 @@ server <- function(input, output, session) {
       formatted.dates <- vector(mode = "character")
       index <- 1
       
-      formatted.dates[index] <- format(as.POSIXct(parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+      formatted.dates[index] <- format(as.POSIXct(JSON_data$parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
       index <- index + 1
       
       i <- 1
-      while (i < parsedResult$cnt) {
+      while (i < JSON_data$parsedResult$cnt) {
         
-        working.date <- format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')], tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+        working.date <- format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',i,sep='')], tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
         
         if (!(working.date %in% formatted.dates)) {
           
@@ -109,8 +170,6 @@ server <- function(input, output, session) {
     
     output$weatherData <- renderUI({
       
-      print("Function invoked")
-      
       timePeriod <- NULL
       
       if (input$time == 0) {
@@ -135,85 +194,85 @@ server <- function(input, output, session) {
       
       UTC.offset <- 0
       UTC.offset.string <- NULL
-      if (parsedResult$city.timezone >= 0) {
+      if (JSON_data$parsedResult$city.timezone >= 0) {
         
-        UTC.offset <- parsedResult$city.timezone
+        UTC.offset <- JSON_data$parsedResult$city.timezone
         UTC.offset.string <- "+"
         
       } else {
         
-        UTC.offset <- abs(parsedResult$city.timezone)
+        UTC.offset <- abs(JSON_data$parsedResult$city.timezone)
         UTC.offset.string <- "-"
         
       }
       
       UTC.offset <- format(as.POSIXct(UTC.offset, tz = "UTC", origin="1970-01-01"), "%H")
       
-      JSONTime <- format(as.POSIXct(parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%H:%M:%S")
-      JSONDate <- format(as.POSIXct(parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+      JSONTime <- format(as.POSIXct(JSON_data$parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%H:%M:%S")
+      JSONDate <- format(as.POSIXct(JSON_data$parsedResult$list.dt, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
       
       if (identical(timePeriod, JSONTime) && identical(datePeriod, JSONDate)) {
         
-        mapData$main <- parsedResult$list.weather.main
-        mapData$temp <- trunc(parsedResult$list.main.temp - 273.15)
-        mapData$icon <- paste("http://openweathermap.org/img/wn/", parsedResult$list.weather.icon,"@2x.png", sep = "")
+        mapData$main <- JSON_data$parsedResult$list.weather.main
+        mapData$temp <- trunc(JSON_data$parsedResult$list.main.temp - 273.15)
+        mapData$icon <- paste("http://openweathermap.org/img/wn/", JSON_data$parsedResult$list.weather.icon,"@2x.png", sep = "")
         
-        tags$div(tags$h3(format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
+        tags$div(tags$h3(format(as.POSIXct(JSON_data$parsedResult$list.dt + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
                          " - UTC", UTC.offset.string, UTC.offset),
-                 tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", parsedResult$list.weather.icon,"@2x.png", sep = ""), align = "top"),
+                 tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", JSON_data$parsedResult$list.weather.icon,"@2x.png", sep = ""), align = "top"),
                  tags$div(style = "display: inline-block",
-                          tags$h3(id = "currentMain", parsedResult$list.weather.main),
-                          tags$h3(id = "currentTemp", trunc(parsedResult$list.main.temp - 273.15), "\u2103")),
+                          tags$h3(id = "currentMain", JSON_data$parsedResult$list.weather.main),
+                          tags$h3(id = "currentTemp", trunc(JSON_data$parsedResult$list.main.temp - 273.15), "\u2103")),
                  tags$div(style = "display: inline-block; padding: 10px",
                           tags$h4(
                             tags$span(class = "glyphicon glyphicon-arrow-down"),
-                            "Min: ", trunc(parsedResult$list.main.temp_min - 273.15), "\u2103"),
+                            "Min: ", trunc(JSON_data$parsedResult$list.main.temp_min - 273.15), "\u2103"),
                           tags$h4(
                             tags$span(class = "glyphicon glyphicon-arrow-up"),
-                            "Max: ", trunc(parsedResult$list.main.temp_max - 273.15), "\u2103")),
+                            "Max: ", trunc(JSON_data$parsedResult$list.main.temp_max - 273.15), "\u2103")),
                  tags$div(style = "display: inline-block; padding: 10px", 
                           tags$h4(
                             tags$span(class = "glyphicon glyphicon-tint"),
-                            "Humidity: ", parsedResult$list.main.humidity, "%"),
+                            "Humidity: ", JSON_data$parsedResult$list.main.humidity, "%"),
                           tags$h4(
                             tags$span(class = "glyphicon glyphicon-cloud"),
-                            "Cloud coverage: ", parsedResult$list.all, "%"))
+                            "Cloud coverage: ", JSON_data$parsedResult$list.all, "%"))
         )
         
       } else {
         
         i <- 1
-        while (i < parsedResult$cnt) {
+        while (i < JSON_data$parsedResult$cnt) {
           
-          JSONTime <- format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')], tz = "UTC", origin="1970-01-01"), "%H:%M:%S")
-          JSONDate <- format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')], tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+          JSONTime <- format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',i,sep='')], tz = "UTC", origin="1970-01-01"), "%H:%M:%S")
+          JSONDate <- format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',i,sep='')], tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
           
           if (identical(timePeriod, JSONTime) && identical(datePeriod, JSONDate)) {
             
-            mapData$main <- parsedResult[,paste('list.weather.main.',i,sep='')]
-            mapData$temp <- trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15)
-            mapData$icon <- paste("http://openweathermap.org/img/wn/", parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = "")
+            mapData$main <- JSON_data$parsedResult[,paste('list.weather.main.',i,sep='')]
+            mapData$temp <- trunc(JSON_data$parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15)
+            mapData$icon <- paste("http://openweathermap.org/img/wn/", JSON_data$parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = "")
             
-            return(tags$div(tags$h3(format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
+            return(tags$div(tags$h3(format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',i,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y %H:%M"),
                                     " - UTC", UTC.offset.string, UTC.offset),
-                             tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = ""), align = "top"),
+                             tags$img(style = "background-color: #3c8dbc; border-radius: 100%", src = paste("http://openweathermap.org/img/wn/", JSON_data$parsedResult[,paste('list.weather.icon.',i,sep='')],"@2x.png", sep = ""), align = "top"),
                              tags$div(style = "display: inline-block",
-                                      tags$h3(id = "currentMain", parsedResult[,paste('list.weather.main.',i,sep='')]),
-                                      tags$h3(id = "currentTemp", trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15), "\u2103")),
+                                      tags$h3(id = "currentMain", JSON_data$parsedResult[,paste('list.weather.main.',i,sep='')]),
+                                      tags$h3(id = "currentTemp", trunc(JSON_data$parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15), "\u2103")),
                              tags$div(style = "display: inline-block; padding: 10px",
                                       tags$h4(
                                         tags$span(class = "glyphicon glyphicon-arrow-down"),
-                                        "Min: ", trunc(parsedResult[,paste('list.main.temp_min.',i,sep='')] - 273.15), "\u2103"),
+                                        "Min: ", trunc(JSON_data$parsedResult[,paste('list.main.temp_min.',i,sep='')] - 273.15), "\u2103"),
                                       tags$h4(
                                         tags$span(class = "glyphicon glyphicon-arrow-up"),
-                                        "Max: ", trunc(parsedResult[,paste('list.main.temp_max.',i,sep='')] - 273.15), "\u2103")),
+                                        "Max: ", trunc(JSON_data$parsedResult[,paste('list.main.temp_max.',i,sep='')] - 273.15), "\u2103")),
                              tags$div(style = "display: inline-block; padding: 10px",
                                       tags$h4(
                                         tags$span(class = "glyphicon glyphicon-tint"),
-                                        "Humidity: ", parsedResult[,paste('list.main.humidity.',i,sep='')], "%"),
+                                        "Humidity: ", JSON_data$parsedResult[,paste('list.main.humidity.',i,sep='')], "%"),
                                       tags$h4(
                                         tags$span(class = "glyphicon glyphicon-cloud"),
-                                        "Cloud coverage: ", parsedResult[,paste('list.all.',i,sep='')], "%"))
+                                        "Cloud coverage: ", JSON_data$parsedResult[,paste('list.all.',i,sep='')], "%"))
             )
             )
             
@@ -238,20 +297,21 @@ server <- function(input, output, session) {
       
       map <- leaflet() %>%
         addTiles() %>%
-        setView(lat = parsedResult$city.coord.lat,
-                lng = parsedResult$city.coord.lon,
+        setView(lat = JSON_data$parsedResult$city.coord.lat,
+                lng = JSON_data$parsedResult$city.coord.lon,
                 zoom = 11) %>%
-        addMarkers(lat = parsedResult$city.coord.lat,
-                   lng = parsedResult$city.coord.lon,
+        addMarkers(lat = JSON_data$parsedResult$city.coord.lat,
+                   lng = JSON_data$parsedResult$city.coord.lon,
                    popup = paste(mapData$temp,"\u2103"," -",mapData$main),
                    icon = mapIcon)
+      
+      output$pinnedWeather <- renderUI({
+        
+        actionButton(inputId = "pinnedWeatherHandle", class = "btn btn-success", label = "Update location", width = "100%", disabled = TRUE)
+        
+      })
+      
       map
-      
-    })
-    
-    output$pinnedWeather <- renderUI({
-      
-      actionButton(inputId = "pinnedWeatherHandle", class = "btn btn-success", label = "Update location", width = "100%")
       
     })
     
@@ -261,11 +321,25 @@ server <- function(input, output, session) {
         removeMarker(layerId = "current") %>%
         addMarkers(lat = input$map_click$lat, lng = input$map_click$lng, layerId = "current")
       
+      shinyjs::enable("pinnedWeatherHandle")
+      
+    })
+    
+    observeEvent(input$pinnedWeatherHandle, {
+      
+      progress <- Progress$new(session, min=1, max=15)
+      on.exit(progress$close())
+      
+      progress$set(message = 'Calculation in progress',
+                   detail = 'This may take a while...')
+      
+      getData(paste(input$map_click$lat, input$map_click$lng, sep = ","), TRUE)
+      
     })
     
     output$graphHead <- renderUI({
       
-      tags$h3(paste("Graphs and charts for ", parsedResult$city.name, ", ", countrycode(parsedResult$city.country, origin = "iso2c", destination = "country.name"), sep = ""))
+      tags$h3(paste("Graphs and charts for ", JSON_data$parsedResult$city.name, ", ", countrycode(JSON_data$parsedResult$city.country, origin = "iso2c", destination = "country.name"), sep = ""))
       
     })
     
@@ -275,19 +349,19 @@ server <- function(input, output, session) {
       tempTodayLabels <- vector(mode = "character")
       i <- 1
       index <- 1
-      while (index < parsedResult$cnt) {
+      while (index < JSON_data$parsedResult$cnt) {
         
-        if (identical(JSONDate, format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")) && length(tempTodayData) == 0 && length(tempTodayLabels) == 0) {
+        if (identical(JSONDate, format(as.POSIXct(JSON_data$parsedResult$list.dt + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")) && length(tempTodayData) == 0 && length(tempTodayLabels) == 0) {
           
-          tempTodayData[i] <- trunc(parsedResult$list.main.temp - 273.15)
-          tempTodayLabels[i] <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          tempTodayData[i] <- trunc(JSON_data$parsedResult$list.main.temp - 273.15)
+          tempTodayLabels[i] <- format(as.POSIXct(JSON_data$parsedResult$list.dt + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
           i <- i + 1
           index <- index - 1
           
-        } else if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
+        } else if (identical(JSONDate, format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',index,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
           
-          tempTodayData[i] <- trunc(parsedResult[,paste('list.main.temp.',index,sep='')] - 273.15)
-          tempTodayLabels[i] <- format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          tempTodayData[i] <- trunc(JSON_data$parsedResult[,paste('list.main.temp.',index,sep='')] - 273.15)
+          tempTodayLabels[i] <- format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',index,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
           i <- i + 1
           
         }
@@ -307,18 +381,17 @@ server <- function(input, output, session) {
       avgsLabels <- vector(mode = "character")
       avgsIndex <- 1
       
-      JSONDate <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
-      print(JSONDate)
+      JSONDate <- format(as.POSIXct(JSON_data$parsedResult$list.dt + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
       avgsLabels[avgsIndex] <- JSONDate
-      workingAvg <- parsedResult$list.main.temp - 273.15
+      workingAvg <- JSON_data$parsedResult$list.main.temp - 273.15
       avgCount <- 1
       i <- 1
       
-      while (i < parsedResult$cnt) {
+      while (i < JSON_data$parsedResult$cnt) {
         
-        if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
+        if (identical(JSONDate, format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',i,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
           
-          workingAvg <- workingAvg + as.numeric(trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15))
+          workingAvg <- workingAvg + as.numeric(trunc(JSON_data$parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15))
           avgCount <- avgCount + 1
           
         } else {
@@ -326,7 +399,7 @@ server <- function(input, output, session) {
           avgs[avgsIndex] <- trunc(workingAvg / avgCount)
           avgsIndex <- avgsIndex + 1
           
-          JSONDate <- format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+          JSONDate <- format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',i,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
           avgsLabels[avgsIndex] <- JSONDate
           workingAvg <- 0
           avgCount <- 0
@@ -335,7 +408,7 @@ server <- function(input, output, session) {
           
         }
         
-        if (i + 1 == parsedResult$cnt) {
+        if (i + 1 == JSON_data$parsedResult$cnt) {
           
           avgs[avgsIndex] <- trunc(workingAvg / avgCount)
           
@@ -357,35 +430,35 @@ server <- function(input, output, session) {
       percentageTodayLabels <- vector(mode = "character")
       i <- 1
       index <- 1
-      while (index < parsedResult$cnt) {
+      while (index < JSON_data$parsedResult$cnt) {
         
-        if (identical(JSONDate, format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")) &&
+        if (identical(JSONDate, format(as.POSIXct(JSON_data$parsedResult$list.dt + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")) &&
             length(humidityOrCloud) == 0 &&
             length(percentage) == 0 &&
             length(percentageTodayLabels) == 0) {
           
           humidityOrCloud[i] <- "Humidity"
-          percentage[i] <- parsedResult$list.main.humidity
-          percentageTodayLabels[i] <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          percentage[i] <- JSON_data$parsedResult$list.main.humidity
+          percentageTodayLabels[i] <- format(as.POSIXct(JSON_data$parsedResult$list.dt + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
           i <- i + 1
           
           humidityOrCloud[i] <- "Cloud Coverage"
-          percentage[i] <- parsedResult$list.all
-          percentageTodayLabels[i] <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          percentage[i] <- JSON_data$parsedResult$list.all
+          percentageTodayLabels[i] <- format(as.POSIXct(JSON_data$parsedResult$list.dt + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
           i <- i + 1
           
           index <- index - 1
           
-        } else if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
+        } else if (identical(JSONDate, format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',index,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
           
           humidityOrCloud[i] <- "Humidity"
-          percentage[i] <- parsedResult[,paste('list.main.humidity.',index,sep='')]
-          percentageTodayLabels[i] <- format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          percentage[i] <- JSON_data$parsedResult[,paste('list.main.humidity.',index,sep='')]
+          percentageTodayLabels[i] <- format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',index,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
           i <- i + 1
           
           humidityOrCloud[i] <- "Cloud Coverage"
-          percentage[i] <- parsedResult[,paste('list.all.',index,sep='')]
-          percentageTodayLabels[i] <- format(as.POSIXct(parsedResult[,paste('list.dt.',index,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
+          percentage[i] <- JSON_data$parsedResult[,paste('list.all.',index,sep='')]
+          percentageTodayLabels[i] <- format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',index,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%H:%M")
           i <- i + 1
           
         }
@@ -406,17 +479,17 @@ server <- function(input, output, session) {
       avgsLabels <- vector(mode = "character")
       avgsIndex <- 1
       
-      JSONDate <- format(as.POSIXct(parsedResult$list.dt + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+      JSONDate <- format(as.POSIXct(JSON_data$parsedResult$list.dt + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
       avgsLabels[avgsIndex] <- JSONDate
-      workingAvg <- parsedResult$list.main.temp - 273.15
+      workingAvg <- JSON_data$parsedResult$list.main.temp - 273.15
       avgCount <- 1
       i <- 1
       
-      while (i < parsedResult$cnt) {
+      while (i < JSON_data$parsedResult$cnt) {
         
-        if (identical(JSONDate, format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
+        if (identical(JSONDate, format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',i,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y"))) {
           
-          workingAvg <- workingAvg + as.numeric(trunc(parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15))
+          workingAvg <- workingAvg + as.numeric(trunc(JSON_data$parsedResult[,paste('list.main.temp.',i,sep='')] - 273.15))
           avgCount <- avgCount + 1
           
         } else {
@@ -424,7 +497,7 @@ server <- function(input, output, session) {
           avgs[avgsIndex] <- trunc(workingAvg / avgCount)
           avgsIndex <- avgsIndex + 1
           
-          JSONDate <- format(as.POSIXct(parsedResult[,paste('list.dt.',i,sep='')] + parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
+          JSONDate <- format(as.POSIXct(JSON_data$parsedResult[,paste('list.dt.',i,sep='')] + JSON_data$parsedResult$city.timezone, tz = "UTC", origin="1970-01-01"), "%d/%m/%y")
           avgsLabels[avgsIndex] <- JSONDate
           workingAvg <- 0
           avgCount <- 0
@@ -433,7 +506,7 @@ server <- function(input, output, session) {
           
         }
         
-        if (i + 1 == parsedResult$cnt) {
+        if (i + 1 == JSON_data$parsedResult$cnt) {
           
           avgs[avgsIndex] <- trunc(workingAvg / avgCount)
           
@@ -458,7 +531,7 @@ server <- function(input, output, session) {
       line_graph <- ggplot(data = tempTodayDF, aes(x = time, y = temp, group = "1")) +
         geom_line(stat = "identity", color = '#3c8dbc', se=FALSE) + 
         geom_point(color = '#3c8dbc', size = 3) +
-        labs(title = paste("Temperatures in ",parsedResult$city.name," - ",JSONDate, sep = ""), y = "Temperature \u2103", x = "Time") +
+        labs(title = paste("Temperatures in ",JSON_data$parsedResult$city.name," - ",JSONDate, sep = ""), y = "Temperature \u2103", x = "Time") +
         theme(
           
           panel.background =  element_rect(fill = "white"),
@@ -480,7 +553,7 @@ server <- function(input, output, session) {
       ggplot(data = avgTempFiveDaysDF, aes(x = day, y = temp, group = "1")) +
         geom_smooth(method=lm, se=FALSE, color = 'red') + 
         geom_point(color = 'red', size = 3) +
-        labs(title = paste("Average temperature in ",parsedResult$city.name, sep = ""), y = "Temperature \u2103", x = "Day") +
+        labs(title = paste("Average temperature in ",JSON_data$parsedResult$city.name," (",avgTempFiveDaysDF$day[1]," - ",avgTempFiveDaysDF$day[nrow(avgTempFiveDaysDF)],")", sep = ""), y = "Temperature \u2103", x = "Day") +
         theme(
           
           panel.background =  element_rect(fill = "white"),
@@ -503,7 +576,7 @@ server <- function(input, output, session) {
       bar_chart <- ggplot(data = percentageTodayDF, aes(x = time, y = perc, fill = legend)) +
         geom_bar(stat = "identity", position = position_dodge()) +
         scale_fill_manual(values = c("#3c8dbc", "#222d32")) +
-        labs(title = paste("Humidity and Cloud Coverage in ",parsedResult$city.name, sep = ""), y = "Percentage (%)", x = "Time") +
+        labs(title = paste("Humidity and Cloud Coverage in ",JSON_data$parsedResult$city.name," - ",JSONDate, sep = ""), y = "Percentage (%)", x = "Time") +
         theme(
           
           panel.background =  element_rect(fill = "white"),

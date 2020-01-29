@@ -39,8 +39,8 @@ ui <- dashboardPage(
       
         uiOutput("header"),
         tags$br(),
-        leafletOutput("map")
-        #uiOutput("pinnedWeather")
+        leafletOutput("map"),
+        uiOutput("pinnedWeather")
              
       )
       
@@ -68,10 +68,6 @@ ui <- dashboardPage(
              
              plotOutput("plotPercentages")
       )
-      
-      #column(width = 5,
-             
-      #       plotOutput("plotAvgPercentages"))
       
     )
     
