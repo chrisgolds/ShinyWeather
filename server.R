@@ -12,6 +12,14 @@ UTC.time <- NULL
 
 getData <- function(str_loc, is_update_loc) {
   
+  JSON_backup <- NULL
+  if(!is.null(JSON_data$parsedResult)) {
+    
+    JSON_backup <- JSON_data$parsedResult #If querying new location data, take copy of latest result in case new query
+    #throws an error
+    
+  }
+  
   UTC.time <<- Sys.time()
   attr(UTC.time, "tzone") <- "UTC"
   
@@ -41,6 +49,19 @@ getData <- function(str_loc, is_update_loc) {
   
   JSON_data$parsedResult <<- as.data.frame(fromJSON(result))
   
+  if(JSON_data$parsedResult$cod == "404") {
+    
+    if (!is.na(JSON_backup)) {
+      JSON_data$parsedResult <- JSON_backup
+    }
+    return(1)
+    
+  } else {
+    
+    return(0)
+    
+  }
+  
 }
 
 server <- function(input, output, session) {
@@ -53,7 +74,18 @@ server <- function(input, output, session) {
     progress$set(message = 'Calculation in progress',
                  detail = 'This may take a while...')
     
-    getData(input$test, FALSE)
+    if (input$test == "") {
+      
+      return()
+      
+    }
+    
+    if (getData(input$test, FALSE) == 1) {
+      
+      shinyjs::alert(paste("Could not collect weather data for",input$test))
+      return()
+      
+    }
     
     output$header <- renderUI({
       
