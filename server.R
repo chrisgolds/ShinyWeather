@@ -1,3 +1,4 @@
+#Import all required libraries here
 library(shiny)
 library(shinyjs)
 library(RCurl)
@@ -7,9 +8,18 @@ library(countrycode)
 library(leaflet)
 library(ggplot2)
 
+#JSON_data is a reactive object - the parsedResult property will hold weather information from api.openweathermap.org
+#which is read in as JSON string and parsed as a data frame
+#UTC.time will hold UNIX timestamp of JSON_data relative to UTC adjustments
 JSON_data <- reactiveValues(parsedResult = NULL)
 UTC.time <- NULL
 
+#Function implementation for invoking weathermap API calls with appropriate endpoints
+#First  parameter is the location of the weatehr data in string format - this can be:
+# - City/town name
+# - City/town with country code (separated by comma)
+# - Coordinates
+#Second parameter acts as Boolean flag - if true, will update JSON_data with weather data from location coordinates specified in pinned map point
 getData <- function(str_loc, is_update_loc) {
   
   UTC.time <<- Sys.time()
@@ -39,10 +49,12 @@ getData <- function(str_loc, is_update_loc) {
     
   }
   
+  #JSON string containing weather data parsed into JSON format first, then into a data frame for ease of use in R
   JSON_data$parsedResult <<- as.data.frame(fromJSON(result))
   
 }
 
+#Implementation for server object
 server <- function(input, output, session) {
   
   observeEvent(input$getForecast, {
