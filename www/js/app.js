@@ -38,6 +38,53 @@ function getLoc() {
   
 }
 
+$(document).on("click", ".add-panel", function(evt) {
+  
+  $(this).children().toggle();
+  $(evt.target).data("value", $(evt.target).data("value") + 1);
+  $(evt.target).trigger("change");
+  
+});
+
+var incrementBinding = new Shiny.InputBinding();
+  
+  $.extend(incrementBinding, {
+    
+    find: function(scope) {
+      return $(scope).find('.add-panel');
+    },
+    
+    getValue: function(el) {
+      return($(el).data("value"));
+    },
+    
+    setValue: function(el, value) {
+      $(el).data("value", $(evt.target).data("value") + 1);
+    },
+    
+    subscribe: function(el, callback) {
+      $(el).on('change.add-panel',function(event) {
+        callback();
+      });
+    },
+    
+    unsubscribe: function(el) {
+      $(el).off('.add-panel');
+    },
+    
+    receiveMessage: function(el, data) {
+      this.setValue(el, data.value);
+      $(el).trigger('change');
+    },
+    
+    getType: function(el) {
+      return "addGlancePanel";
+    }
+    
+  });
+  
+  Shiny.inputBindings.register(incrementBinding);
+
 window.onload = function () {
   
   getLoc();
